@@ -3,6 +3,9 @@ const { Client, LocalAuth } = require('whatsapp-web.js')
 const qrcode = require('qrcode-terminal')
 const express = require('express')
 const cors = require('cors')
+const { execSync } = require('child_process')
+const fs = require('fs')
+const path = require('path')
 const routes = require('./src/routes')
 const { menuPrincipal, getCatalogo, getFaqs, getCupones, guardarLog } = require('./src/menu')
 
@@ -11,16 +14,62 @@ app.use(cors())
 app.use(express.json())
 app.use('/api', routes)
 
-// Detectar ruta de Chrome según el entorno
-const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH
-  || '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.31/chrome-linux64/chrome'
-  || '/usr/bin/google-chrome-stable'
+// Detectar Chrome dinámicamente
+function findChrome() {
+  // 1. Variable de entorno
+  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    console.log('Chrome desde ENV:', process.env.PUPPETEER_EXECUTABLE_PATH)
+    return process.env.PUPPETEER_EXECUTABLE_PATH
+  }
+
+  // 2. Buscar en la carpeta de puppeteer cache dinámicamente
+  const cacheBase = '/opt/render/.cache/puppeteer/chrome'
+  if (fs.existsSync(cacheBase)) {
+    const versions = fs.readdirSync(cacheBase)
+    for (const version of versions) {
+      const chromePath = path.join(cacheBase, version, 'chrome-linux64', 'chrome')
+      if (fs.existsSync(chromePath)) {
+        console.log('Chrome encontrado en cache:', chromePath)
+        return chromePath
+      }
+    }
+  }
+
+  // 3. Rutas comunes del sistema
+  const systemPaths = [
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+  ]
+  for (const p of systemPaths) {
+    if (fs.existsSync(p)) {
+      console.log('Chrome del sistema:', p)
+      return p
+    }
+  }
+
+  // 4. which command
+  try {
+    const result = execSync('which google-chrome-stable || which chromium-browser || which chromium', { encoding: 'utf8' }).trim()
+    if (result && fs.existsSync(result.split('\n')[0])) {
+      console.log('Chrome via which:', result.split('\n')[0])
+      return result.split('\n')[0]
+    }
+  } catch (_) {}
+
+  console.error('❌ No se encontró Chrome. Rutas revisadas:', cacheBase, systemPaths)
+  return null
+}
+
+const chromePath = findChrome()
+console.log('Ejecutable Chrome:', chromePath)
 
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'whatsapp-bot' }),
   puppeteer: {
     headless: true,
-    executablePath: chromePath,
+    executablePath: chromePath || undefined,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -57,7 +106,6 @@ client.on('disconnected', (reason) => {
 
 client.on('message', async (msg) => {
   if (msg.from === 'status@broadcast') return
-
   const body = msg.body.trim().toLowerCase()
   const contacto = await msg.getContact()
   const nombre = contacto.pushname || contacto.name || 'Cliente'
@@ -86,7 +134,7 @@ client.on('message', async (msg) => {
       await guardarLog(numero, nombre, msg.body, respuesta)
     }
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error al procesar mensaje:', error)
   }
 })
 

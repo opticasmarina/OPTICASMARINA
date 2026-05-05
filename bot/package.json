@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "build": "npx puppeteer browsers install chrome"
+    "build": "npx puppeteer browsers install chrome && ls /opt/render/.cache/puppeteer/chrome/ || true"
   },
   "engines": {
     "node": "22.x"
