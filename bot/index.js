@@ -14,32 +14,45 @@ app.use(express.json())
 app.use('/api', routes)
 
 function findChrome() {
-  // 1. Variable de entorno directa
-  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
-    console.log('Chrome desde ENV:', process.env.PUPPETEER_EXECUTABLE_PATH)
-    return process.env.PUPPETEER_EXECUTABLE_PATH
+  const isWindows = process.platform === 'win32'
+
+  if (isWindows) {
+    const windowsPaths = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.PROGRAMFILES + '\\Google\\Chrome\\Application\\chrome.exe',
+      process.env['PROGRAMFILES(X86)'] + '\\Google\\Chrome\\Application\\chrome.exe',
+    ]
+    for (const p of windowsPaths) {
+      if (p && fs.existsSync(p)) {
+        console.log('Chrome encontrado (Windows):', p)
+        return p
+      }
+    }
+    console.error('❌ Chrome no encontrado en Windows. Instala Google Chrome desde https://chrome.google.com')
+    return undefined
   }
 
-  // 2. Buscar recursivamente en .chrome dentro del proyecto
+  // Linux (Render)
   const bases = [
-    path.join(__dirname, '.chrome'),
     path.join(__dirname, '.chrome', 'chrome'),
-    process.env.PUPPETEER_CACHE_DIR,
+    path.join(__dirname, '.chrome'),
     process.env.PUPPETEER_CACHE_DIR && path.join(process.env.PUPPETEER_CACHE_DIR, 'chrome'),
+    process.env.PUPPETEER_CACHE_DIR,
+    '/opt/render/.cache/puppeteer/chrome',
   ].filter(Boolean)
 
   for (const base of bases) {
     if (!fs.existsSync(base)) continue
-    for (const version of fs.readdirSync(base)) {
-      const p = path.join(base, version, 'chrome-linux64', 'chrome')
-      if (fs.existsSync(p)) {
-        console.log('Chrome encontrado:', p)
-        return p
+    try {
+      for (const version of fs.readdirSync(base)) {
+        const p = path.join(base, version, 'chrome-linux64', 'chrome')
+        if (fs.existsSync(p)) { console.log('Chrome (Linux):', p); return p }
       }
-    }
+    } catch (_) {}
   }
 
-  // 3. Sistema
   for (const p of ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium']) {
     if (fs.existsSync(p)) { console.log('Chrome sistema:', p); return p }
   }
@@ -49,7 +62,7 @@ function findChrome() {
 }
 
 const chromePath = findChrome()
-console.log('✅ Chrome path:', chromePath)
+console.log('Chrome path:', chromePath || 'no encontrado — se usará el de Puppeteer')
 
 const puppeteerConfig = {
   headless: true,
@@ -60,7 +73,6 @@ const puppeteerConfig = {
     '--disable-accelerated-2d-canvas',
     '--no-first-run',
     '--no-zygote',
-    '--single-process',
     '--disable-gpu'
   ]
 }
@@ -76,7 +88,7 @@ app.locals.whatsappClient = null
 app.locals.botListo = false
 
 client.on('qr', (qr) => {
-  console.log('\n📱 Escanea este QR:\n')
+  console.log('\n📱 Escanea este QR con WhatsApp:\n')
   qrcode.generate(qr, { small: true })
 })
 
@@ -123,7 +135,7 @@ client.on('message', async (msg) => {
       await guardarLog(numero, nombre, msg.body, respuesta)
     }
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error:', error.message)
   }
 })
 
