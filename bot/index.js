@@ -20,35 +20,26 @@ function findChrome() {
     return process.env.PUPPETEER_EXECUTABLE_PATH
   }
 
-  // 2. Dentro del proyecto (PUPPETEER_CACHE_DIR dentro del repo)
-  const projectCache = path.join(__dirname, '.chrome')
-  if (fs.existsSync(projectCache)) {
-    const versions = fs.readdirSync(projectCache)
-    for (const version of versions) {
-      const p = path.join(projectCache, version, 'chrome-linux64', 'chrome')
-      if (fs.existsSync(p)) { console.log('Chrome en proyecto:', p); return p }
+  // 2. Buscar recursivamente en .chrome dentro del proyecto
+  const bases = [
+    path.join(__dirname, '.chrome'),
+    path.join(__dirname, '.chrome', 'chrome'),
+    process.env.PUPPETEER_CACHE_DIR,
+    process.env.PUPPETEER_CACHE_DIR && path.join(process.env.PUPPETEER_CACHE_DIR, 'chrome'),
+  ].filter(Boolean)
+
+  for (const base of bases) {
+    if (!fs.existsSync(base)) continue
+    for (const version of fs.readdirSync(base)) {
+      const p = path.join(base, version, 'chrome-linux64', 'chrome')
+      if (fs.existsSync(p)) {
+        console.log('Chrome encontrado:', p)
+        return p
+      }
     }
   }
 
-  // 3. Cache de Render (busca cualquier versión dinámica)
-  const renderCache = '/opt/render/.cache/puppeteer/chrome'
-  if (fs.existsSync(renderCache)) {
-    for (const version of fs.readdirSync(renderCache)) {
-      const p = path.join(renderCache, version, 'chrome-linux64', 'chrome')
-      if (fs.existsSync(p)) { console.log('Chrome en Render cache:', p); return p }
-    }
-  }
-
-  // 4. PUPPETEER_CACHE_DIR env
-  const cacheDir = process.env.PUPPETEER_CACHE_DIR
-  if (cacheDir && fs.existsSync(cacheDir)) {
-    for (const version of fs.readdirSync(cacheDir)) {
-      const p = path.join(cacheDir, version, 'chrome-linux64', 'chrome')
-      if (fs.existsSync(p)) { console.log('Chrome en CACHE_DIR:', p); return p }
-    }
-  }
-
-  // 5. Sistema
+  // 3. Sistema
   for (const p of ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium']) {
     if (fs.existsSync(p)) { console.log('Chrome sistema:', p); return p }
   }
