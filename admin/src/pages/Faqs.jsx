@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Plus, Trash2, Edit2, HelpCircle } from 'lucide-react'
 import supabase from '../lib/supabase'
 
 const EMPTY = { pregunta: '', respuesta: '', orden: 0, activo: true }
@@ -21,42 +22,28 @@ export default function Faqs() {
     setLoading(false)
   }
 
-  function abrirNuevo() {
-    setForm({ ...EMPTY, orden: items.length + 1 })
-    setEditId(null)
-    setModal(true)
-  }
-
-  function abrirEditar(item) {
-    setForm({ ...item })
-    setEditId(item.id)
-    setModal(true)
-  }
+  function abrirNuevo() { setForm({ ...EMPTY, orden: items.length + 1 }); setEditId(null); setModal(true) }
+  function abrirEditar(item) { setForm({ ...item }); setEditId(item.id); setModal(true) }
 
   async function guardar() {
-    if (!form.pregunta || !form.respuesta) return showMsg('Pregunta y respuesta son requeridas', 'error')
+    if (!form.pregunta || !form.respuesta) return showMsg('Pregunta y respuesta requeridas', 'error')
     setSaving(true)
     const payload = { ...form, orden: parseInt(form.orden) || 0 }
-    delete payload.id
-    delete payload.created_at
-
-    const query = editId
+    delete payload.id; delete payload.created_at
+    const q = editId
       ? supabase.from('faqs').update(payload).eq('id', editId)
       : supabase.from('faqs').insert(payload)
-
-    const { error } = await query
+    const { error } = await q
     setSaving(false)
     if (error) return showMsg('Error: ' + error.message, 'error')
     showMsg(editId ? 'FAQ actualizada' : 'FAQ agregada', 'success')
-    setModal(false)
-    cargar()
+    setModal(false); cargar()
   }
 
   async function eliminar(id) {
     if (!confirm('¿Eliminar esta pregunta?')) return
     await supabase.from('faqs').delete().eq('id', id)
-    cargar()
-    showMsg('FAQ eliminada', 'success')
+    cargar(); showMsg('Eliminada', 'success')
   }
 
   async function toggleActivo(item) {
@@ -64,16 +51,16 @@ export default function Faqs() {
     cargar()
   }
 
-  function showMsg(text, type) {
-    setMsg({ text, type })
-    setTimeout(() => setMsg(null), 3000)
-  }
+  function showMsg(text, type) { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000) }
 
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Preguntas Frecuentes</h1>
-        <p className="page-subtitle">Estas preguntas el bot las responde automáticamente</p>
+        <div className="page-header-left">
+          <h1 className="page-title">Preguntas frecuentes</h1>
+          <p className="page-subtitle">El bot las responde automáticamente cuando un cliente elige la opción 4</p>
+        </div>
+        <button className="btn btn-primary" onClick={abrirNuevo}><Plus size={14} /> Nueva pregunta</button>
       </div>
 
       {msg && <div className={`alert alert-${msg.type === 'error' ? 'error' : 'success'}`}>{msg.text}</div>}
@@ -81,46 +68,37 @@ export default function Faqs() {
       <div className="card">
         <div className="card-header">
           <span className="card-title">{items.length} preguntas</span>
-          <button className="btn btn-primary" onClick={abrirNuevo}>+ Nueva pregunta</button>
+          <span className="badge badge-green">{items.filter(i => i.activo).length} activas</span>
         </div>
-
         {loading ? (
-          <div className="card-body" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Cargando...</div>
+          <div className="empty-state"><div className="empty-desc">Cargando...</div></div>
         ) : items.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">❓</div>
-            <div className="empty-text">No hay preguntas. Agrega la primera.</div>
+            <div className="empty-icon"><HelpCircle size={32} color="var(--text-3)" /></div>
+            <div className="empty-title">Sin preguntas</div>
+            <div className="empty-desc">Agrega las preguntas más comunes de tus clientes</div>
           </div>
         ) : (
           <table className="table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Pregunta</th>
-                <th>Respuesta</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
+            <thead><tr><th>#</th><th>Pregunta</th><th>Respuesta</th><th>Activa</th><th></th></tr></thead>
             <tbody>
               {items.map(item => (
                 <tr key={item.id}>
-                  <td style={{ color: 'var(--text-muted)', width: 40 }}>{item.orden}</td>
-                  <td style={{ fontWeight: 500, maxWidth: 200 }}>{item.pregunta}</td>
-                  <td style={{ color: 'var(--text-muted)', maxWidth: 300 }}>
+                  <td style={{ color: 'var(--text-3)', width: 36 }}>{item.orden}</td>
+                  <td style={{ fontWeight: 500, maxWidth: 220 }}>{item.pregunta}</td>
+                  <td style={{ color: 'var(--text-2)', maxWidth: 300, fontSize: 13 }}>
                     {item.respuesta.slice(0, 80)}{item.respuesta.length > 80 ? '…' : ''}
                   </td>
                   <td>
-                    <button onClick={() => toggleActivo(item)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                      <span className={`badge ${item.activo ? 'badge-green' : 'badge-red'}`}>
-                        {item.activo ? 'Activa' : 'Inactiva'}
-                      </span>
-                    </button>
+                    <label className="toggle">
+                      <input type="checkbox" checked={item.activo} onChange={() => toggleActivo(item)} />
+                      <span className="toggle-slider" />
+                    </label>
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-outline btn-sm" onClick={() => abrirEditar(item)}>Editar</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => eliminar(item.id)}>Eliminar</button>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => abrirEditar(item)}><Edit2 size={13} /></button>
+                      <button className="btn btn-ghost btn-sm btn-icon" style={{ color: 'var(--danger)' }} onClick={() => eliminar(item.id)}><Trash2 size={13} /></button>
                     </div>
                   </td>
                 </tr>
@@ -135,14 +113,12 @@ export default function Faqs() {
           <div className="modal">
             <div className="modal-header">
               <span className="modal-title">{editId ? 'Editar pregunta' : 'Nueva pregunta'}</span>
-              <button className="modal-close" onClick={() => setModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setModal(false)}><Plus size={16} style={{ transform: 'rotate(45deg)' }} /></button>
             </div>
             <div className="modal-body">
-              <div className="form-row">
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label className="form-label">Pregunta *</label>
-                  <input className="form-input" value={form.pregunta} onChange={e => setForm({ ...form, pregunta: e.target.value })} placeholder="¿Cuál es el horario de atención?" />
-                </div>
+              <div className="form-group">
+                <label className="form-label">Pregunta *</label>
+                <input className="form-input" value={form.pregunta} onChange={e => setForm({ ...form, pregunta: e.target.value })} placeholder="¿Cuál es el horario de atención?" />
               </div>
               <div className="form-group">
                 <label className="form-label">Respuesta *</label>
@@ -150,14 +126,11 @@ export default function Faqs() {
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Orden (número)</label>
+                  <label className="form-label">Orden</label>
                   <input className="form-input" type="number" min="0" value={form.orden} onChange={e => setForm({ ...form, orden: e.target.value })} />
                 </div>
                 <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
-                  <label className="form-check">
-                    <input type="checkbox" checked={form.activo} onChange={e => setForm({ ...form, activo: e.target.checked })} />
-                    Activa
-                  </label>
+                  <label className="form-check"><input type="checkbox" checked={form.activo} onChange={e => setForm({ ...form, activo: e.target.checked })} />Activa</label>
                 </div>
               </div>
             </div>

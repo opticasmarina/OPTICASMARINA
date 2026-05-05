@@ -1,75 +1,104 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink } from 'react-router-dom'
+import {
+  MessageSquare, Package, HelpCircle, Tag, Megaphone,
+  Clock, Users, BarChart2, MessageCircle
+} from 'lucide-react'
+import Dashboard from './pages/Dashboard'
 import Catalogo from './pages/Catalogo'
 import Faqs from './pages/Faqs'
 import Cupones from './pages/Cupones'
 import Broadcast from './pages/Broadcast'
+import Contactos from './pages/Contactos'
+import Programados from './pages/Programados'
 import Logs from './pages/Logs'
 
 const BOT_URL = import.meta.env.VITE_BOT_URL || 'http://localhost:3001'
 
-const navItems = [
-  { path: '/',          icon: '📦', label: 'Catálogo' },
-  { path: '/faqs',      icon: '❓', label: 'FAQs' },
-  { path: '/cupones',   icon: '🎟️', label: 'Cupones' },
-  { path: '/broadcast', icon: '📢', label: 'Broadcast' },
-  { path: '/logs',      icon: '📋', label: 'Mensajes' },
+const nav = [
+  { group: 'General', items: [
+    { path: '/',          icon: BarChart2,     label: 'Dashboard' },
+    { path: '/logs',      icon: MessageCircle, label: 'Conversaciones' },
+  ]},
+  { group: 'Contenido', items: [
+    { path: '/catalogo',  icon: Package,       label: 'Catálogo' },
+    { path: '/faqs',      icon: HelpCircle,    label: 'Preguntas' },
+    { path: '/cupones',   icon: Tag,           label: 'Cupones' },
+  ]},
+  { group: 'Mensajería', items: [
+    { path: '/contactos',   icon: Users,     label: 'Contactos' },
+    { path: '/broadcast',   icon: Megaphone, label: 'Broadcast' },
+    { path: '/programados', icon: Clock,     label: 'Programados' },
+  ]},
 ]
 
 export default function App() {
   const [botStatus, setBotStatus] = useState({ conectado: false, listo: false })
-  const location = useLocation()
 
   useEffect(() => {
-    const checkStatus = async () => {
+    const check = async () => {
       try {
         const r = await fetch(`${BOT_URL}/api/estado`)
-        const data = await r.json()
-        setBotStatus(data)
-      } catch {
-        setBotStatus({ conectado: false, listo: false })
-      }
+        setBotStatus(await r.json())
+      } catch { setBotStatus({ conectado: false, listo: false }) }
     }
-    checkStatus()
-    const interval = setInterval(checkStatus, 10000)
-    return () => clearInterval(interval)
+    check()
+    const t = setInterval(check, 12000)
+    return () => clearInterval(t)
   }, [])
 
   return (
     <div className="layout">
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <span>🤖</span>
-          WhatsApp Bot
+          <div className="logo-icon">
+            <MessageSquare size={16} color="white" />
+          </div>
+          <div>
+            <div className="logo-text">Opticas Marina</div>
+            <div className="logo-sub">Panel de administración</div>
+          </div>
         </div>
 
-        <nav className="sidebar-nav">
-          {navItems.map(item => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path === '/'}
-              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              {item.label}
-            </NavLink>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+          {nav.map(group => (
+            <div key={group.group} className="sidebar-section">
+              <div className="sidebar-section-label">{group.group}</div>
+              {group.items.map(item => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.path === '/'}
+                  className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                >
+                  <item.icon size={15} />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
-        </nav>
+        </div>
 
-        <div className="sidebar-bot-status">
-          <span className={`status-dot ${botStatus.listo ? 'online' : 'offline'}`} />
-          {botStatus.listo ? 'Bot conectado' : 'Bot desconectado'}
+        <div className="sidebar-footer">
+          <div className="bot-status">
+            <span className={`status-dot ${botStatus.listo ? 'online' : 'offline'}`} />
+            <div className="status-label">
+              <strong>{botStatus.listo ? 'Bot activo' : 'Bot inactivo'}</strong>
+            </div>
+          </div>
         </div>
       </aside>
 
       <main className="main">
         <Routes>
-          <Route path="/"          element={<Catalogo botUrl={BOT_URL} />} />
-          <Route path="/faqs"      element={<Faqs botUrl={BOT_URL} />} />
-          <Route path="/cupones"   element={<Cupones botUrl={BOT_URL} />} />
-          <Route path="/broadcast" element={<Broadcast botUrl={BOT_URL} />} />
-          <Route path="/logs"      element={<Logs botUrl={BOT_URL} />} />
+          <Route path="/"            element={<Dashboard botUrl={BOT_URL} />} />
+          <Route path="/catalogo"    element={<Catalogo />} />
+          <Route path="/faqs"        element={<Faqs />} />
+          <Route path="/cupones"     element={<Cupones />} />
+          <Route path="/contactos"   element={<Contactos />} />
+          <Route path="/broadcast"   element={<Broadcast botUrl={BOT_URL} />} />
+          <Route path="/programados" element={<Programados botUrl={BOT_URL} />} />
+          <Route path="/logs"        element={<Logs />} />
         </Routes>
       </main>
     </div>
