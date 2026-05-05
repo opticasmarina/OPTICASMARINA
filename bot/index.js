@@ -3,7 +3,6 @@ const { Client, LocalAuth } = require('whatsapp-web.js')
 const qrcode = require('qrcode-terminal')
 const express = require('express')
 const cors = require('cors')
-const { execSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const routes = require('./src/routes')
@@ -14,80 +13,79 @@ app.use(cors())
 app.use(express.json())
 app.use('/api', routes)
 
-// Detectar Chrome dinámicamente
 function findChrome() {
-  // 1. Variable de entorno
+  // 1. Variable de entorno directa
   if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
     console.log('Chrome desde ENV:', process.env.PUPPETEER_EXECUTABLE_PATH)
     return process.env.PUPPETEER_EXECUTABLE_PATH
   }
 
-  // 2. Buscar en la carpeta de puppeteer cache dinámicamente
-  const cacheBase = '/opt/render/.cache/puppeteer/chrome'
-  if (fs.existsSync(cacheBase)) {
-    const versions = fs.readdirSync(cacheBase)
+  // 2. Dentro del proyecto (PUPPETEER_CACHE_DIR dentro del repo)
+  const projectCache = path.join(__dirname, '.chrome')
+  if (fs.existsSync(projectCache)) {
+    const versions = fs.readdirSync(projectCache)
     for (const version of versions) {
-      const chromePath = path.join(cacheBase, version, 'chrome-linux64', 'chrome')
-      if (fs.existsSync(chromePath)) {
-        console.log('Chrome encontrado en cache:', chromePath)
-        return chromePath
-      }
+      const p = path.join(projectCache, version, 'chrome-linux64', 'chrome')
+      if (fs.existsSync(p)) { console.log('Chrome en proyecto:', p); return p }
     }
   }
 
-  // 3. Rutas comunes del sistema
-  const systemPaths = [
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
-  ]
-  for (const p of systemPaths) {
-    if (fs.existsSync(p)) {
-      console.log('Chrome del sistema:', p)
-      return p
+  // 3. Cache de Render (busca cualquier versión dinámica)
+  const renderCache = '/opt/render/.cache/puppeteer/chrome'
+  if (fs.existsSync(renderCache)) {
+    for (const version of fs.readdirSync(renderCache)) {
+      const p = path.join(renderCache, version, 'chrome-linux64', 'chrome')
+      if (fs.existsSync(p)) { console.log('Chrome en Render cache:', p); return p }
     }
   }
 
-  // 4. which command
-  try {
-    const result = execSync('which google-chrome-stable || which chromium-browser || which chromium', { encoding: 'utf8' }).trim()
-    if (result && fs.existsSync(result.split('\n')[0])) {
-      console.log('Chrome via which:', result.split('\n')[0])
-      return result.split('\n')[0]
+  // 4. PUPPETEER_CACHE_DIR env
+  const cacheDir = process.env.PUPPETEER_CACHE_DIR
+  if (cacheDir && fs.existsSync(cacheDir)) {
+    for (const version of fs.readdirSync(cacheDir)) {
+      const p = path.join(cacheDir, version, 'chrome-linux64', 'chrome')
+      if (fs.existsSync(p)) { console.log('Chrome en CACHE_DIR:', p); return p }
     }
-  } catch (_) {}
+  }
 
-  console.error('❌ No se encontró Chrome. Rutas revisadas:', cacheBase, systemPaths)
-  return null
+  // 5. Sistema
+  for (const p of ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium']) {
+    if (fs.existsSync(p)) { console.log('Chrome sistema:', p); return p }
+  }
+
+  console.error('❌ Chrome no encontrado')
+  return undefined
 }
 
 const chromePath = findChrome()
-console.log('Ejecutable Chrome:', chromePath)
+console.log('✅ Chrome path:', chromePath)
+
+const puppeteerConfig = {
+  headless: true,
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process',
+    '--disable-gpu'
+  ]
+}
+
+if (chromePath) puppeteerConfig.executablePath = chromePath
 
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'whatsapp-bot' }),
-  puppeteer: {
-    headless: true,
-    executablePath: chromePath || undefined,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-gpu'
-    ]
-  }
+  puppeteer: puppeteerConfig
 })
 
 app.locals.whatsappClient = null
 app.locals.botListo = false
 
 client.on('qr', (qr) => {
-  console.log('\n📱 Escanea este QR con WhatsApp:\n')
+  console.log('\n📱 Escanea este QR:\n')
   qrcode.generate(qr, { small: true })
 })
 
@@ -134,7 +132,7 @@ client.on('message', async (msg) => {
       await guardarLog(numero, nombre, msg.body, respuesta)
     }
   } catch (error) {
-    console.error('Error al procesar mensaje:', error)
+    console.error('Error:', error)
   }
 })
 
