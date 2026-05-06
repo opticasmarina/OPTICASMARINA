@@ -143,4 +143,8 @@ const PORT = process.env.PORT || 3001
 app.listen(PORT, () => console.log(`🚀 API en puerto ${PORT}`))
 
 console.log('🔄 Iniciando WhatsApp...')
-client.initialize()
+
+client.initialize().catch((error) => {
+  console.error('❌ Error iniciando WhatsApp:', error.message)
+  console.error('⚠️ La API seguirá activa aunque WhatsApp no inicie.')
+})
