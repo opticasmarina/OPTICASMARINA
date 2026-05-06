@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Users, User, Send, RefreshCw, Link, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import supabase from '../lib/supabase'
 
 const PLANTILLAS = [
@@ -53,28 +55,93 @@ export default function Broadcast({ botUrl }) {
     return txt.trim()
   }
 
-  async function enviar() {
-    const txtFinal = mensajeFinal()
-    if (!txtFinal) return setError('Escribe un mensaje')
-    const destinos = [...selGrupos, ...selContactos]
-    if (destinos.length === 0) return setError('Selecciona al menos un destino')
-    if (!confirm(`¿Enviar a ${destinos.length} destino(s)?`)) return
-    setEnviando(true); setError(null); setResultado(null)
-    try {
-      const r = await fetch(`${botUrl}/api/broadcast`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensaje: txtFinal, grupos: destinos })
-      })
-      const data = await r.json()
-      if (!r.ok) throw new Error(data.error)
-      const ok = data.resultados?.filter(r => r.ok).length || 0
-      const fail = data.resultados?.filter(r => !r.ok).length || 0
-      setResultado({ ok, fail })
-      setSelGrupos([]); setSelContactos([])
-    } catch (e) { setError('Error: ' + e.message) }
-    setEnviando(false)
+async function enviar() {
+  const txtFinal = mensajeFinal()
+
+  if (!txtFinal) {
+    return Swal.fire({
+      icon: 'warning',
+      title: 'Mensaje requerido',
+      text: 'Escribe un mensaje antes de enviar.',
+      confirmButtonColor: '#10b981'
+    })
   }
+
+  const destinos = [...selGrupos, ...selContactos]
+
+  if (destinos.length === 0) {
+    return Swal.fire({
+      icon: 'warning',
+      title: 'Sin destinatarios',
+      text: 'Selecciona al menos un destino.',
+      confirmButtonColor: '#10b981'
+    })
+  }
+
+  const result = await Swal.fire({
+    icon: 'question',
+    title: 'Confirmar envío',
+    text: `¿Enviar este mensaje a ${destinos.length} destino(s)?`,
+    showCancelButton: true,
+    confirmButtonText: 'Sí, enviar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#10b981',
+    cancelButtonColor: '#6b7280'
+  })
+
+  if (!result.isConfirmed) return
+
+  setEnviando(true)
+  setError(null)
+  setResultado(null)
+
+  Swal.fire({
+    title: 'Enviando broadcast...',
+    text: 'Espera un momento.',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    didOpen: () => {
+      Swal.showLoading()
+    }
+  })
+
+  try {
+    const r = await fetch(`${botUrl}/api/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mensaje: txtFinal, grupos: destinos })
+    })
+
+    const data = await r.json()
+
+    if (!r.ok) throw new Error(data.error)
+
+    const ok = data.resultados?.filter(r => r.ok).length || 0
+    const fail = data.resultados?.filter(r => !r.ok).length || 0
+
+    setResultado({ ok, fail })
+    setSelGrupos([])
+    setSelContactos([])
+
+    await Swal.fire({
+      icon: fail > 0 ? 'warning' : 'success',
+      title: fail > 0 ? 'Broadcast enviado con errores' : 'Broadcast enviado',
+      text: `Exitosos: ${ok}${fail > 0 ? ` · Fallidos: ${fail}` : ''}`,
+      confirmButtonColor: '#10b981'
+    })
+  } catch (e) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error al enviar broadcast',
+      text: e.message,
+      confirmButtonColor: '#ef4444'
+    })
+
+    setError('Error: ' + e.message)
+  }
+
+  setEnviando(false)
+}
 
   const totalSel = selGrupos.length + selContactos.length
 

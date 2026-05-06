@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Clock, Calendar, AlertCircle, User, Users } from 'lucide-react'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import supabase from '../lib/supabase'
 
 const EMPTY = { nombre: '', mensaje: '', tipo_destino: 'contactos', cron_expr: '0 9 * * 1', descripcion_cron: 'Lunes a las 9:00am', activo: true }
@@ -40,31 +42,115 @@ export default function Programados({ botUrl }) {
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
   function abrirEditar(item) { setForm({ ...item }); setEditId(item.id); setModal(true) }
 
-  async function guardar() {
-    if (!form.nombre || !form.mensaje) return showMsg('Nombre y mensaje requeridos', 'error')
-    setSaving(true)
-    const payload = { ...form }
-    delete payload.id; delete payload.created_at; delete payload.ultima_ejecucion
-    const q = editId
-      ? supabase.from('mensajes_programados').update(payload).eq('id', editId)
-      : supabase.from('mensajes_programados').insert(payload)
-    const { error } = await q
-    setSaving(false)
-    if (error) return showMsg('Error: ' + error.message, 'error')
-    showMsg(editId ? 'Actualizado' : 'Programa creado', 'success')
-    setModal(false); cargar()
+async function guardar() {
+  if (!form.nombre || !form.mensaje) {
+    return Swal.fire({
+      icon: 'warning',
+      title: 'Campos requeridos',
+      text: 'Nombre y mensaje son obligatorios.',
+      confirmButtonColor: '#10b981'
+    })
   }
 
-  async function eliminar(id) {
-    if (!confirm('¿Eliminar este programa?')) return
-    await supabase.from('mensajes_programados').delete().eq('id', id)
-    cargar(); showMsg('Eliminado', 'success')
+  setSaving(true)
+
+  const payload = { ...form }
+  delete payload.id
+  delete payload.created_at
+  delete payload.ultima_ejecucion
+
+  const q = editId
+    ? supabase.from('mensajes_programados').update(payload).eq('id', editId)
+    : supabase.from('mensajes_programados').insert(payload)
+
+  const { error } = await q
+
+  setSaving(false)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al guardar programa',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
   }
 
-  async function toggleActivo(item) {
-    await supabase.from('mensajes_programados').update({ activo: !item.activo }).eq('id', item.id)
-    cargar()
+  await Swal.fire({
+    icon: 'success',
+    title: editId ? 'Programa actualizado' : 'Programa creado',
+    timer: 1500,
+    showConfirmButton: false
+  })
+
+  setModal(false)
+  cargar()
+}
+
+async function eliminar(id) {
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: '¿Eliminar programa?',
+    text: 'Esta acción no se puede deshacer.',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, eliminar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#6b7280'
+  })
+
+  if (!result.isConfirmed) return
+
+  const { error } = await supabase
+    .from('mensajes_programados')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al eliminar',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
   }
+
+  await Swal.fire({
+    icon: 'success',
+    title: 'Programa eliminado',
+    timer: 1400,
+    showConfirmButton: false
+  })
+
+  cargar()
+}
+
+async function toggleActivo(item) {
+  const nuevoEstado = !item.activo
+
+  const { error } = await supabase
+    .from('mensajes_programados')
+    .update({ activo: nuevoEstado })
+    .eq('id', item.id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al actualizar programa',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
+  }
+
+  Swal.fire({
+    icon: 'success',
+    title: nuevoEstado ? 'Programa activado' : 'Programa desactivado',
+    timer: 1100,
+    showConfirmButton: false
+  })
+
+  cargar()
+}
 
   function showMsg(text, type) { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000) }
 
@@ -78,8 +164,7 @@ export default function Programados({ botUrl }) {
         <button className="btn btn-primary" onClick={abrirNuevo}><Plus size={14} /> Nuevo programa</button>
       </div>
 
-      {msg && <div className={`alert alert-${msg.type === 'error' ? 'error' : 'success'}`}>{msg.text}</div>}
-
+{null}
       <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
         <AlertCircle size={14} />
         Los mensajes se envían automáticamente. El bot debe estar conectado en Render para que funcionen.
