@@ -10,7 +10,19 @@ const routes = require('./src/routes')
 const { menuPrincipal, getCatalogo, getFaqs, getCupones, guardarLog } = require('./src/menu')
 
 const app = express()
-app.use(cors())
+
+app.use(cors({
+  origin: [
+    'https://opticasmarina-admin.onrender.com',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}))
+
+app.options('*', cors())
+
 app.use(express.json())
 app.use('/api', routes)
 
@@ -175,4 +187,7 @@ const PORT = process.env.PORT || 3001
 app.listen(PORT, () => console.log(`🚀 API en puerto ${PORT}`))
 
 console.log('🔄 Iniciando WhatsApp...')
-client.initialize()
+client.initialize().catch((error) => {
+  console.error('❌ Error iniciando WhatsApp:', error.message)
+  console.error('⚠️ La API seguirá activa.')
+})
