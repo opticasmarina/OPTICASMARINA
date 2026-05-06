@@ -10,7 +10,19 @@ const routes = require('./src/routes')
 const { menuPrincipal, getCatalogo, getFaqs, getCupones, guardarLog } = require('./src/menu')
 
 const app = express()
-app.use(cors())
+
+app.use(cors({
+  origin: [
+    'https://opticasmarina-admin.onrender.com',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}))
+
+app.options('*', cors())
+
 app.use(express.json())
 app.use('/api', routes)
 
@@ -117,6 +129,7 @@ app.locals.qrBase64 = null
 app.locals.qrString = null
 app.locals.telefono = null
 app.locals.nombreCuenta = null
+app.locals.inicializandoWhatsApp = false
 
 client.on('qr', async (qr) => {
   console.log('\n📱 Escanea este QR:\n')
@@ -136,16 +149,27 @@ client.on('authenticated', () => {
 })
 
 client.on('ready', async () => {
+  if (app.locals.botListo) return
+
   console.log('🤖 Bot listo!')
+
   app.locals.whatsappClient = client
   app.locals.botListo = true
+  app.locals.inicializandoWhatsApp = false
   app.locals.qrBase64 = null
   app.locals.qrString = null
+
   try {
     const info = client.info
-    app.locals.telefono = info.wid.user
-    app.locals.nombreCuenta = info.pushname || 'Sin nombre'
-    console.log('📞 Conectado como:', app.locals.nombreCuenta, '+' + app.locals.telefono)
+
+    app.locals.telefono = info?.wid?.user || null
+    app.locals.nombreCuenta = info?.pushname || 'WhatsApp conectado'
+
+    console.log(
+      '📞 Conectado como:',
+      app.locals.nombreCuenta,
+      app.locals.telefono ? '+' + app.locals.telefono : ''
+    )
   } catch (e) {
     console.error('Error info:', e.message)
   }
@@ -153,14 +177,14 @@ client.on('ready', async () => {
 
 client.on('disconnected', (reason) => {
   console.log('❌ Desconectado:', reason)
+
   app.locals.botListo = false
   app.locals.whatsappClient = null
   app.locals.telefono = null
   app.locals.nombreCuenta = null
-  setTimeout(() => {
-    console.log('🔄 Reconectando...')
-    client.initialize()
-  }, 8000)
+  app.locals.inicializandoWhatsApp = false
+
+  console.log('⚠️ WhatsApp se desconectó. Reinicia manualmente el servicio para evitar bucles de memoria.')
 })
 
 client.on('message', async (msg) => {
@@ -198,7 +222,37 @@ client.on('message', async (msg) => {
 })
 
 const PORT = process.env.PORT || 3001
+
 app.listen(PORT, () => console.log(`🚀 API en puerto ${PORT}`))
 
-console.log('🔄 Iniciando WhatsApp...')
-client.initialize()
+async function iniciarWhatsApp() {
+  if (app.locals.inicializandoWhatsApp || app.locals.botListo) {
+    console.log('⚠️ WhatsApp ya está iniciando o conectado.')
+    return
+  }
+
+  app.locals.inicializandoWhatsApp = true
+  console.log('🔄 Iniciando WhatsApp...')
+
+  try {
+    await client.initialize()
+  } catch (error) {
+    app.locals.inicializandoWhatsApp = false
+    console.error('❌ Error iniciando WhatsApp:', error.message)
+    console.error('⚠️ La API seguirá activa.')
+  }
+}
+
+if (process.env.ENABLE_WHATSAPP === 'true') {
+  iniciarWhatsApp()
+} else {
+  console.log('⚠️ WhatsApp desactivado. Solo API activa.')
+}
+
+process.on('unhandledRejection', (error) => {
+  console.error('❌ Promesa no controlada:', error.message)
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Excepción no controlada:', error.message)
+})
