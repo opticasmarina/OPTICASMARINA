@@ -185,9 +185,12 @@ client.on('message', async (msg) => {
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => console.log(`🚀 API en puerto ${PORT}`))
-
-console.log('🔄 Iniciando WhatsApp...')
-client.initialize().catch((error) => {
-  console.error('❌ Error iniciando WhatsApp:', error.message)
-  console.error('⚠️ La API seguirá activa.')
-})
+if (process.env.ENABLE_WHATSAPP === 'true') {
+  console.log('🔄 Iniciando WhatsApp...')
+  client.initialize().catch((error) => {
+    console.error('❌ Error iniciando WhatsApp:', error.message)
+    console.error('⚠️ La API seguirá activa.')
+  })
+} else {
+  console.log('⚠️ WhatsApp desactivado. Solo API activa.')
+}
