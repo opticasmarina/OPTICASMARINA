@@ -28,7 +28,15 @@ export default function Contactos() {
   }
 
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
-  function abrirEditar(item) { setForm({ ...item }); setEditId(item.id); setModal(true) }
+
+  function abrirEditar(item) {
+    setForm({
+      ...item,
+      numero: mostrarNumeroSinLada(item.numero)
+    })
+    setEditId(item.id)
+    setModal(true)
+  }
 
 async function guardar() {
   if (!form.nombre || !form.numero) {
@@ -42,7 +50,13 @@ async function guardar() {
 
   let num = form.numero.replace(/\D/g, '')
 
-  if (!num.startsWith('52')) num = '52' + num
+  if (num.length === 10) {
+    num = '521' + num
+  }
+
+  if (num.startsWith('52') && !num.startsWith('521') && num.length === 12) {
+    num = '521' + num.slice(2)
+  }
 
   setSaving(true)
 
@@ -115,6 +129,20 @@ async function eliminar(id) {
 
   function showMsg(text, type) { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000) }
 
+  function mostrarNumeroSinLada(numero) {
+    const limpio = String(numero || '').replace(/\D/g, '')
+
+    if (limpio.startsWith('521') && limpio.length === 13) {
+      return limpio.slice(3)
+    }
+
+    if (limpio.startsWith('52') && limpio.length === 12) {
+      return limpio.slice(2)
+    }
+
+    return limpio
+  }
+
   const filtrados = items.filter(i =>
     busqueda === '' ||
     i.nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -168,7 +196,7 @@ async function eliminar(id) {
               {filtrados.map(item => (
                 <tr key={item.id}>
                   <td style={{ fontWeight: 500 }}>{item.nombre}</td>
-                  <td><code>{item.numero}</code></td>
+                  <td><code>{mostrarNumeroSinLada(item.numero)}</code></td>
                   <td><span className={`badge ${ETIQ_COLOR[item.etiqueta] || 'badge-gray'}`}>{item.etiqueta}</span></td>
                   <td style={{ color: 'var(--text-2)', fontSize: 12 }}>{item.notas || '—'}</td>
                   <td>
@@ -231,8 +259,7 @@ async function eliminar(id) {
                 <div className="form-group">
                   <label className="form-label">Número WhatsApp *</label>
                   <input className="form-input" value={form.numero} onChange={e => setForm({ ...form, numero: e.target.value })} placeholder="6681234567" />
-                  <div className="form-hint">Solo dígitos. Se agrega 52 automáticamente.</div>
-                </div>
+                  <div className="form-hint">Escribe solo los 10 dígitos. Se guardará como 521 para WhatsApp.</div> </div>
               </div>
               <div className="form-group">
                 <label className="form-label">Etiqueta</label>

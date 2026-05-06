@@ -45,6 +45,20 @@ export default function Broadcast({ botUrl }) {
   function toggleGrupo(id) { setSelGrupos(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]) }
   function toggleContacto(num) { setSelContactos(p => p.includes(num) ? p.filter(x => x !== num) : [...p, num]) }
 
+  function mostrarNumeroSinLada(numero) {
+    const limpio = String(numero || '').replace(/\D/g, '')
+
+    if (limpio.startsWith('521') && limpio.length === 13) {
+      return limpio.slice(3)
+    }
+
+    if (limpio.startsWith('52') && limpio.length === 12) {
+      return limpio.slice(2)
+    }
+
+    return limpio
+  }
+
   function mensajeFinal() {
     let txt = mensaje
     const linksValidos = links.filter(l => l.url.trim())
@@ -263,8 +277,7 @@ async function enviar() {
                         <input type="checkbox" checked={selContactos.includes(c.numero+'@c.us')} onChange={() => {}} />
                         <div>
                           <div className="check-item-name">{c.nombre}</div>
-                          <div className="check-item-sub">{c.numero} · {c.etiqueta}</div>
-                        </div>
+                          <div className="check-item-sub">{mostrarNumeroSinLada(c.numero)} · {c.etiqueta}</div>    </div>
                       </div>
                     ))}
                   </div>
