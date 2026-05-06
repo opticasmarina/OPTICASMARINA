@@ -1,6 +1,7 @@
 require('dotenv').config()
 const { Client, LocalAuth } = require('whatsapp-web.js')
 const qrcode = require('qrcode-terminal')
+const QRCode = require('qrcode')
 const express = require('express')
 const cors = require('cors')
 const fs = require('fs')
@@ -30,11 +31,10 @@ function findChrome() {
         return p
       }
     }
-    console.error('❌ Chrome no encontrado en Windows. Instala Google Chrome desde https://chrome.google.com')
+    console.error('❌ Chrome no encontrado en Windows.')
     return undefined
   }
 
-  // Linux (Render)
   const bases = [
     path.join(__dirname, '.chrome', 'chrome'),
     path.join(__dirname, '.chrome'),
@@ -57,12 +57,11 @@ function findChrome() {
     if (fs.existsSync(p)) { console.log('Chrome sistema:', p); return p }
   }
 
-  console.error('❌ Chrome no encontrado')
   return undefined
 }
 
 const chromePath = findChrome()
-console.log('Chrome path:', chromePath || 'no encontrado — se usará el de Puppeteer')
+console.log('Chrome path:', chromePath || 'no encontrado')
 
 const puppeteerConfig = {
   headless: true,
@@ -84,25 +83,58 @@ const client = new Client({
   puppeteer: puppeteerConfig
 })
 
+// Estado global del bot
 app.locals.whatsappClient = null
 app.locals.botListo = false
+app.locals.qrBase64 = null
+app.locals.qrString = null
+app.locals.telefono = null
+app.locals.nombreCuenta = null
 
-client.on('qr', (qr) => {
+client.on('qr', async (qr) => {
   console.log('\n📱 Escanea este QR con WhatsApp:\n')
   qrcode.generate(qr, { small: true })
+  app.locals.qrString = qr
+  try {
+    app.locals.qrBase64 = await QRCode.toDataURL(qr, { width: 256, margin: 2 })
+  } catch (e) {
+    console.error('Error generando QR imagen:', e.message)
+  }
 })
 
-client.on('authenticated', () => console.log('✅ WhatsApp autenticado'))
+client.on('authenticated', () => {
+  console.log('✅ WhatsApp autenticado')
+  app.locals.qrBase64 = null
+  app.locals.qrString = null
+})
 
-client.on('ready', () => {
+client.on('ready', async () => {
   console.log('🤖 Bot listo!')
   app.locals.whatsappClient = client
   app.locals.botListo = true
+  app.locals.qrBase64 = null
+  app.locals.qrString = null
+  try {
+    const info = client.info
+    app.locals.telefono = info.wid.user
+    app.locals.nombreCuenta = info.pushname || 'Sin nombre'
+    console.log('📞 Conectado como:', app.locals.nombreCuenta, '+' + app.locals.telefono)
+  } catch (e) {
+    console.error('Error obteniendo info:', e.message)
+  }
 })
 
 client.on('disconnected', (reason) => {
   console.log('❌ Desconectado:', reason)
   app.locals.botListo = false
+  app.locals.whatsappClient = null
+  app.locals.telefono = null
+  app.locals.nombreCuenta = null
+  // Reintentar conexión
+  setTimeout(() => {
+    console.log('🔄 Reintentando conexión...')
+    client.initialize()
+  }, 5000)
 })
 
 client.on('message', async (msg) => {
@@ -143,8 +175,4 @@ const PORT = process.env.PORT || 3001
 app.listen(PORT, () => console.log(`🚀 API en puerto ${PORT}`))
 
 console.log('🔄 Iniciando WhatsApp...')
-
-client.initialize().catch((error) => {
-  console.error('❌ Error iniciando WhatsApp:', error.message)
-  console.error('⚠️ La API seguirá activa aunque WhatsApp no inicie.')
-})
+client.initialize()

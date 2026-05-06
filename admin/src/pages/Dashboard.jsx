@@ -1,14 +1,25 @@
-import { useState, useEffect } from 'react'
-import { Package, HelpCircle, Tag, MessageCircle, Users, TrendingUp, Activity } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Package, HelpCircle, Tag, MessageCircle, Users, TrendingUp, Activity, Smartphone, RefreshCw, Wifi, WifiOff } from 'lucide-react'
 import supabase from '../lib/supabase'
 
-export default function Dashboard({ botUrl }) {
+const BOT_URL = import.meta.env.VITE_BOT_URL || 'http://localhost:3001'
+
+export default function Dashboard() {
   const [stats, setStats] = useState({ productos: 0, faqs: 0, cupones: 0, mensajes: 0, contactos: 0 })
   const [logs, setLogs] = useState([])
-  const [botStatus, setBotStatus] = useState({ listo: false })
+  const [botStatus, setBotStatus] = useState({ listo: false, telefono: null, nombre: null, tieneQR: false })
+  const [qrImg, setQrImg] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [qrLoading, setQrLoading] = useState(false)
+  const pollRef = useRef(null)
 
-  useEffect(() => { cargar(); checkBot() }, [])
+  useEffect(() => {
+    cargar()
+    checkBot()
+    // Polling cada 4 segundos para detectar QR y conexión
+    pollRef.current = setInterval(checkBot, 4000)
+    return () => clearInterval(pollRef.current)
+  }, [])
 
   async function cargar() {
     const [p, f, c, m, ct] = await Promise.all([
@@ -25,8 +36,31 @@ export default function Dashboard({ botUrl }) {
   }
 
   async function checkBot() {
-    try { const r = await fetch(`${botUrl}/api/estado`); setBotStatus(await r.json()) }
-    catch { setBotStatus({ listo: false }) }
+    try {
+      const r = await fetch(`${BOT_URL}/api/estado`)
+      const data = await r.json()
+      setBotStatus(data)
+
+      if (!data.listo && data.tieneQR) {
+        // Obtener imagen del QR
+        const qr = await fetch(`${BOT_URL}/api/qr`)
+        const qrData = await qr.json()
+        if (qrData.qr) setQrImg(qrData.qr)
+      } else if (data.listo) {
+        setQrImg(null)
+      }
+    } catch {
+      setBotStatus({ listo: false, telefono: null, nombre: null, tieneQR: false })
+    }
+  }
+
+  async function solicitarQR() {
+    setQrLoading(true)
+    setQrImg(null)
+    // El QR llega solo en el siguiente poll, esperar 2 segundos
+    await new Promise(r => setTimeout(r, 2000))
+    await checkBot()
+    setQrLoading(false)
   }
 
   const cards = [
@@ -54,6 +88,115 @@ export default function Dashboard({ botUrl }) {
         </span>
       </div>
 
+      {/* ── Conexión WhatsApp ───────────────────────────────────────── */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Smartphone size={15} color="var(--text-2)" />
+            <span className="card-title">Conexión WhatsApp</span>
+          </div>
+          {!botStatus.listo && (
+            <button className="btn btn-outline btn-sm" onClick={solicitarQR} disabled={qrLoading}>
+              <RefreshCw size={12} /> {qrLoading ? 'Cargando...' : 'Actualizar QR'}
+            </button>
+          )}
+        </div>
+
+        <div className="card-body">
+          {botStatus.listo ? (
+            // ── Conectado ──────────────────────────────────────────────
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+              <div style={{
+                width: 56, height: 56,
+                background: '#d1fae5',
+                borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Wifi size={24} color="#10b981" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 15, color: '#065f46', marginBottom: 4 }}>
+                  Bot conectado correctamente
+                </div>
+                {botStatus.nombre && (
+                  <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 2 }}>
+                    <strong>Cuenta:</strong> {botStatus.nombre}
+                  </div>
+                )}
+                {botStatus.telefono && (
+                  <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                    <strong>Número:</strong> +{botStatus.telefono}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : qrImg ? (
+            // ── QR disponible ──────────────────────────────────────────
+            <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
+              <div style={{ flexShrink: 0 }}>
+                <img
+                  src={qrImg}
+                  alt="QR WhatsApp"
+                  style={{ width: 200, height: 200, border: '4px solid var(--border)', borderRadius: 12 }}
+                />
+              </div>
+              <div style={{ paddingTop: 8 }}>
+                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
+                  Escanea para conectar el bot
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, color: 'var(--text-2)' }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <span style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>1</span>
+                    Abre WhatsApp en tu teléfono
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <span style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>2</span>
+                    Toca ⋮ → <strong>Dispositivos vinculados</strong>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <span style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>3</span>
+                    Toca <strong>Vincular un dispositivo</strong>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <span style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>4</span>
+                    Apunta la cámara al QR
+                  </div>
+                </div>
+                <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <RefreshCw size={11} />
+                  El QR se actualiza automáticamente cada 4 segundos
+                </div>
+              </div>
+            </div>
+          ) : (
+            // ── Sin QR todavía ─────────────────────────────────────────
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0' }}>
+              <div style={{
+                width: 56, height: 56,
+                background: '#fef2f2',
+                borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <WifiOff size={24} color="#ef4444" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: '#991b1b', marginBottom: 4 }}>
+                  Bot desconectado
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>
+                  El servidor del bot no está corriendo o está iniciando.
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  Si estás en local: corre <code>node index.js</code> en la carpeta <code>bot/</code><br />
+                  Si está en Render: revisa los Logs del servicio.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Stats ───────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: '1.5rem' }}>
         {cards.map(c => (
           <div className="stat-card" key={c.label}>
@@ -68,6 +211,7 @@ export default function Dashboard({ botUrl }) {
         ))}
       </div>
 
+      {/* ── Últimas conversaciones ───────────────────────────────────── */}
       <div className="card">
         <div className="card-header">
           <span className="card-title">Últimas conversaciones</span>
@@ -81,7 +225,9 @@ export default function Dashboard({ botUrl }) {
           </div>
         ) : (
           <table className="table">
-            <thead><tr><th>Contacto</th><th>Mensaje</th><th>Respuesta</th><th>Fecha</th></tr></thead>
+            <thead>
+              <tr><th>Contacto</th><th>Mensaje</th><th>Respuesta</th><th>Fecha</th></tr>
+            </thead>
             <tbody>
               {logs.map(l => (
                 <tr key={l.id}>
