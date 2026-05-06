@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit2, User, Users, Tag } from 'lucide-react'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import supabase from '../lib/supabase'
 
 const EMPTY = { nombre: '', numero: '', etiqueta: 'cliente', notas: '', activo: true }
@@ -28,28 +30,88 @@ export default function Contactos() {
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
   function abrirEditar(item) { setForm({ ...item }); setEditId(item.id); setModal(true) }
 
-  async function guardar() {
-    if (!form.nombre || !form.numero) return showMsg('Nombre y número son requeridos', 'error')
-    let num = form.numero.replace(/\D/g, '')
-    if (!num.startsWith('52')) num = '52' + num
-    setSaving(true)
-    const payload = { ...form, numero: num }
-    delete payload.id; delete payload.created_at
-    const q = editId
-      ? supabase.from('contactos').update(payload).eq('id', editId)
-      : supabase.from('contactos').insert(payload)
-    const { error } = await q
-    setSaving(false)
-    if (error) return showMsg('Error: ' + error.message, 'error')
-    showMsg(editId ? 'Contacto actualizado' : 'Contacto agregado', 'success')
-    setModal(false); cargar()
+async function guardar() {
+  if (!form.nombre || !form.numero) {
+    return Swal.fire({
+      icon: 'warning',
+      title: 'Campos requeridos',
+      text: 'Nombre y número son obligatorios.',
+      confirmButtonColor: '#10b981'
+    })
   }
 
-  async function eliminar(id) {
-    if (!confirm('¿Eliminar contacto?')) return
-    await supabase.from('contactos').delete().eq('id', id)
-    cargar(); showMsg('Eliminado', 'success')
+  let num = form.numero.replace(/\D/g, '')
+
+  if (!num.startsWith('52')) num = '52' + num
+
+  setSaving(true)
+
+  const payload = { ...form, numero: num }
+  delete payload.id
+  delete payload.created_at
+
+  const q = editId
+    ? supabase.from('contactos').update(payload).eq('id', editId)
+    : supabase.from('contactos').insert(payload)
+
+  const { error } = await q
+
+  setSaving(false)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al guardar contacto',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
   }
+
+  await Swal.fire({
+    icon: 'success',
+    title: editId ? 'Contacto actualizado' : 'Contacto agregado',
+    timer: 1500,
+    showConfirmButton: false
+  })
+
+  setModal(false)
+  cargar()
+}
+
+async function eliminar(id) {
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: '¿Eliminar contacto?',
+    text: 'Esta acción no se puede deshacer.',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, eliminar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#6b7280'
+  })
+
+  if (!result.isConfirmed) return
+
+  const { error } = await supabase.from('contactos').delete().eq('id', id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al eliminar',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
+  }
+
+  await Swal.fire({
+    icon: 'success',
+    title: 'Contacto eliminado',
+    timer: 1400,
+    showConfirmButton: false
+  })
+
+  cargar()
+}
 
   function showMsg(text, type) { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000) }
 
@@ -111,9 +173,32 @@ export default function Contactos() {
                   <td style={{ color: 'var(--text-2)', fontSize: 12 }}>{item.notas || '—'}</td>
                   <td>
                     <label className="toggle">
-                      <input type="checkbox" checked={item.activo} onChange={async () => {
-                        await supabase.from('contactos').update({ activo: !item.activo }).eq('id', item.id); cargar()
-                      }} />
+<input type="checkbox" checked={item.activo} onChange={async () => {
+  const nuevoEstado = !item.activo
+
+  const { error } = await supabase
+    .from('contactos')
+    .update({ activo: nuevoEstado })
+    .eq('id', item.id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al actualizar contacto',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
+  }
+
+  Swal.fire({
+    icon: 'success',
+    title: nuevoEstado ? 'Contacto activado' : 'Contacto desactivado',
+    timer: 1100,
+    showConfirmButton: false
+  })
+
+  cargar()
+}} />
                       <span className="toggle-slider" />
                     </label>
                   </td>

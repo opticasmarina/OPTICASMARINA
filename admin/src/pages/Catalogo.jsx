@@ -1,6 +1,8 @@
 // ─── CATALOGO ────────────────────────────────────────────────────────────────
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit2, Package, Eye, EyeOff } from 'lucide-react'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import supabase from '../lib/supabase'
 
 const EMPTY = { nombre: '', descripcion: '', precio: '', categoria: 'General', foto_url: '', disponible: true }
@@ -26,31 +28,112 @@ export default function Catalogo() {
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
   function abrirEditar(item) { setForm({ ...item }); setEditId(item.id); setModal(true) }
 
-  async function guardar() {
-    if (!form.nombre || !form.precio) return showMsg('Nombre y precio requeridos', 'error')
-    setSaving(true)
-    const payload = { ...form, precio: parseFloat(form.precio) }
-    delete payload.id; delete payload.created_at
-    const q = editId
-      ? supabase.from('productos').update(payload).eq('id', editId)
-      : supabase.from('productos').insert(payload)
-    const { error } = await q
-    setSaving(false)
-    if (error) return showMsg('Error: ' + error.message, 'error')
-    showMsg(editId ? 'Actualizado' : 'Producto agregado', 'success')
-    setModal(false); cargar()
+async function guardar() {
+  if (!form.nombre || !form.precio) {
+    return Swal.fire({
+      icon: 'warning',
+      title: 'Campos requeridos',
+      text: 'Nombre y precio son obligatorios.',
+      confirmButtonColor: '#10b981'
+    })
   }
 
-  async function eliminar(id) {
-    if (!confirm('¿Eliminar?')) return
-    await supabase.from('productos').delete().eq('id', id)
-    cargar(); showMsg('Eliminado', 'success')
+  setSaving(true)
+
+  const payload = { ...form, precio: parseFloat(form.precio) }
+  delete payload.id
+  delete payload.created_at
+
+  const q = editId
+    ? supabase.from('productos').update(payload).eq('id', editId)
+    : supabase.from('productos').insert(payload)
+
+  const { error } = await q
+
+  setSaving(false)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al guardar',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
   }
 
-  async function toggleDisponible(item) {
-    await supabase.from('productos').update({ disponible: !item.disponible }).eq('id', item.id)
-    cargar()
+  await Swal.fire({
+    icon: 'success',
+    title: editId ? 'Producto actualizado' : 'Producto agregado',
+    text: editId ? 'Los cambios se guardaron correctamente.' : 'El producto fue agregado al catálogo.',
+    timer: 1600,
+    showConfirmButton: false
+  })
+
+  setModal(false)
+  cargar()
+}
+
+async function eliminar(id) {
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: '¿Eliminar producto?',
+    text: 'Esta acción no se puede deshacer.',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, eliminar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#6b7280'
+  })
+
+  if (!result.isConfirmed) return
+
+  const { error } = await supabase.from('productos').delete().eq('id', id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al eliminar',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
   }
+
+  await Swal.fire({
+    icon: 'success',
+    title: 'Producto eliminado',
+    timer: 1400,
+    showConfirmButton: false
+  })
+
+  cargar()
+}
+
+async function toggleDisponible(item) {
+  const nuevoEstado = !item.disponible
+
+  const { error } = await supabase
+    .from('productos')
+    .update({ disponible: nuevoEstado })
+    .eq('id', item.id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al actualizar',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
+  }
+
+  Swal.fire({
+    icon: 'success',
+    title: nuevoEstado ? 'Producto visible' : 'Producto oculto',
+    timer: 1100,
+    showConfirmButton: false
+  })
+
+  cargar()
+}
 
   function showMsg(text, type) { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000) }
 

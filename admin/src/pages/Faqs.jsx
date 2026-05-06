@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit2, HelpCircle } from 'lucide-react'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import supabase from '../lib/supabase'
 
 const EMPTY = { pregunta: '', respuesta: '', orden: 0, activo: true }
@@ -25,31 +27,111 @@ export default function Faqs() {
   function abrirNuevo() { setForm({ ...EMPTY, orden: items.length + 1 }); setEditId(null); setModal(true) }
   function abrirEditar(item) { setForm({ ...item }); setEditId(item.id); setModal(true) }
 
-  async function guardar() {
-    if (!form.pregunta || !form.respuesta) return showMsg('Pregunta y respuesta requeridas', 'error')
-    setSaving(true)
-    const payload = { ...form, orden: parseInt(form.orden) || 0 }
-    delete payload.id; delete payload.created_at
-    const q = editId
-      ? supabase.from('faqs').update(payload).eq('id', editId)
-      : supabase.from('faqs').insert(payload)
-    const { error } = await q
-    setSaving(false)
-    if (error) return showMsg('Error: ' + error.message, 'error')
-    showMsg(editId ? 'FAQ actualizada' : 'FAQ agregada', 'success')
-    setModal(false); cargar()
+async function guardar() {
+  if (!form.pregunta || !form.respuesta) {
+    return Swal.fire({
+      icon: 'warning',
+      title: 'Campos requeridos',
+      text: 'Pregunta y respuesta son obligatorias.',
+      confirmButtonColor: '#10b981'
+    })
   }
 
-  async function eliminar(id) {
-    if (!confirm('¿Eliminar esta pregunta?')) return
-    await supabase.from('faqs').delete().eq('id', id)
-    cargar(); showMsg('Eliminada', 'success')
+  setSaving(true)
+
+  const payload = { ...form, orden: parseInt(form.orden) || 0 }
+  delete payload.id
+  delete payload.created_at
+
+  const q = editId
+    ? supabase.from('faqs').update(payload).eq('id', editId)
+    : supabase.from('faqs').insert(payload)
+
+  const { error } = await q
+
+  setSaving(false)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al guardar pregunta',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
   }
 
-  async function toggleActivo(item) {
-    await supabase.from('faqs').update({ activo: !item.activo }).eq('id', item.id)
-    cargar()
+  await Swal.fire({
+    icon: 'success',
+    title: editId ? 'Pregunta actualizada' : 'Pregunta agregada',
+    timer: 1500,
+    showConfirmButton: false
+  })
+
+  setModal(false)
+  cargar()
+}
+
+async function eliminar(id) {
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: '¿Eliminar pregunta?',
+    text: 'Esta acción no se puede deshacer.',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, eliminar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#6b7280'
+  })
+
+  if (!result.isConfirmed) return
+
+  const { error } = await supabase.from('faqs').delete().eq('id', id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al eliminar',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
   }
+
+  await Swal.fire({
+    icon: 'success',
+    title: 'Pregunta eliminada',
+    timer: 1400,
+    showConfirmButton: false
+  })
+
+  cargar()
+}
+
+async function toggleActivo(item) {
+  const nuevoEstado = !item.activo
+
+  const { error } = await supabase
+    .from('faqs')
+    .update({ activo: nuevoEstado })
+    .eq('id', item.id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al actualizar pregunta',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
+  }
+
+  Swal.fire({
+    icon: 'success',
+    title: nuevoEstado ? 'Pregunta activada' : 'Pregunta desactivada',
+    timer: 1100,
+    showConfirmButton: false
+  })
+
+  cargar()
+}
 
   function showMsg(text, type) { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000) }
 

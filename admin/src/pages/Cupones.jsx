@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit2, Tag } from 'lucide-react'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import supabase from '../lib/supabase'
 
 const EMPTY = { codigo: '', descripcion: '', descuento_pct: 0, activo: true, expira_en: '' }
@@ -25,23 +27,88 @@ export default function Cupones() {
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
   function abrirEditar(item) { setForm({ ...item, expira_en: item.expira_en ? item.expira_en.split('T')[0] : '' }); setEditId(item.id); setModal(true) }
 
-  async function guardar() {
-    if (!form.codigo) return showMsg('El código es requerido', 'error')
-    setSaving(true)
-    const payload = { codigo: form.codigo.toUpperCase().trim(), descripcion: form.descripcion, descuento_pct: parseInt(form.descuento_pct) || 0, activo: form.activo, expira_en: form.expira_en || null }
-    const q = editId ? supabase.from('cupones').update(payload).eq('id', editId) : supabase.from('cupones').insert(payload)
-    const { error } = await q
-    setSaving(false)
-    if (error) return showMsg('Error: ' + error.message, 'error')
-    showMsg(editId ? 'Cupón actualizado' : 'Cupón creado', 'success')
-    setModal(false); cargar()
+async function guardar() {
+  if (!form.codigo) {
+    return Swal.fire({
+      icon: 'warning',
+      title: 'Código requerido',
+      text: 'Debes escribir un código para el cupón.',
+      confirmButtonColor: '#10b981'
+    })
   }
 
-  async function eliminar(id) {
-    if (!confirm('¿Eliminar cupón?')) return
-    await supabase.from('cupones').delete().eq('id', id)
-    cargar(); showMsg('Eliminado', 'success')
+  setSaving(true)
+
+  const payload = {
+    codigo: form.codigo.toUpperCase().trim(),
+    descripcion: form.descripcion,
+    descuento_pct: parseInt(form.descuento_pct) || 0,
+    activo: form.activo,
+    expira_en: form.expira_en || null
   }
+
+  const q = editId
+    ? supabase.from('cupones').update(payload).eq('id', editId)
+    : supabase.from('cupones').insert(payload)
+
+  const { error } = await q
+
+  setSaving(false)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al guardar cupón',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
+  }
+
+  await Swal.fire({
+    icon: 'success',
+    title: editId ? 'Cupón actualizado' : 'Cupón creado',
+    timer: 1500,
+    showConfirmButton: false
+  })
+
+  setModal(false)
+  cargar()
+}
+
+async function eliminar(id) {
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: '¿Eliminar cupón?',
+    text: 'Esta acción no se puede deshacer.',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, eliminar',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#6b7280'
+  })
+
+  if (!result.isConfirmed) return
+
+  const { error } = await supabase.from('cupones').delete().eq('id', id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al eliminar',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
+  }
+
+  await Swal.fire({
+    icon: 'success',
+    title: 'Cupón eliminado',
+    timer: 1400,
+    showConfirmButton: false
+  })
+
+  cargar()
+}
 
   function showMsg(text, type) { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000) }
   function isExpirado(exp) { return exp && new Date(exp) < new Date() }
@@ -97,9 +164,32 @@ export default function Cupones() {
                     </td>
                     <td>
                       <label className="toggle">
-                        <input type="checkbox" checked={item.activo && !exp} onChange={async () => {
-                          await supabase.from('cupones').update({ activo: !item.activo }).eq('id', item.id); cargar()
-                        }} />
+<input type="checkbox" checked={item.activo && !exp} onChange={async () => {
+  const nuevoEstado = !item.activo
+
+  const { error } = await supabase
+    .from('cupones')
+    .update({ activo: nuevoEstado })
+    .eq('id', item.id)
+
+  if (error) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Error al actualizar cupón',
+      text: error.message,
+      confirmButtonColor: '#ef4444'
+    })
+  }
+
+  Swal.fire({
+    icon: 'success',
+    title: nuevoEstado ? 'Cupón activado' : 'Cupón desactivado',
+    timer: 1100,
+    showConfirmButton: false
+  })
+
+  cargar()
+}} />
                         <span className="toggle-slider" />
                       </label>
                     </td>
