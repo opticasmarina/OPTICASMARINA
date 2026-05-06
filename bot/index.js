@@ -10,19 +10,7 @@ const routes = require('./src/routes')
 const { menuPrincipal, getCatalogo, getFaqs, getCupones, guardarLog } = require('./src/menu')
 
 const app = express()
-
-app.use(cors({
-  origin: [
-    'https://opticasmarina-admin.onrender.com',
-    'http://localhost:5173',
-    'http://localhost:3000'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}))
-
-app.options('*', cors())
-
+app.use(cors())
 app.use(express.json())
 app.use('/api', routes)
 
@@ -39,11 +27,10 @@ function findChrome() {
     ]
     for (const p of windowsPaths) {
       if (p && fs.existsSync(p)) {
-        console.log('Chrome encontrado (Windows):', p)
+        console.log('Chrome (Windows):', p)
         return p
       }
     }
-    console.error('❌ Chrome no encontrado en Windows.')
     return undefined
   }
 
@@ -75,27 +62,55 @@ function findChrome() {
 const chromePath = findChrome()
 console.log('Chrome path:', chromePath || 'no encontrado')
 
+// Máximo ahorro de memoria para Render Free (512MB)
+const CHROME_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--no-first-run',
+  '--no-zygote',
+  '--single-process',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-breakpad',
+  '--disable-client-side-phishing-detection',
+  '--disable-component-update',
+  '--disable-default-apps',
+  '--disable-hang-monitor',
+  '--disable-ipc-flooding-protection',
+  '--disable-popup-blocking',
+  '--disable-prompt-on-repost',
+  '--disable-renderer-backgrounding',
+  '--disable-sync',
+  '--disable-translate',
+  '--disable-notifications',
+  '--disable-logging',
+  '--disable-permissions-api',
+  '--disable-speech-api',
+  '--hide-scrollbars',
+  '--ignore-certificate-errors',
+  '--metrics-recording-only',
+  '--mute-audio',
+  '--no-default-browser-check',
+  '--safebrowsing-disable-auto-update',
+  '--js-flags=--max-old-space-size=128',
+]
+
 const puppeteerConfig = {
   headless: true,
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-accelerated-2d-canvas',
-    '--no-first-run',
-    '--no-zygote',
-    '--disable-gpu'
-  ]
+  args: CHROME_ARGS,
 }
 
 if (chromePath) puppeteerConfig.executablePath = chromePath
 
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'whatsapp-bot' }),
-  puppeteer: puppeteerConfig
+  puppeteer: puppeteerConfig,
 })
 
-// Estado global del bot
 app.locals.whatsappClient = null
 app.locals.botListo = false
 app.locals.qrBase64 = null
@@ -104,13 +119,13 @@ app.locals.telefono = null
 app.locals.nombreCuenta = null
 
 client.on('qr', async (qr) => {
-  console.log('\n📱 Escanea este QR con WhatsApp:\n')
+  console.log('\n📱 Escanea este QR:\n')
   qrcode.generate(qr, { small: true })
   app.locals.qrString = qr
   try {
     app.locals.qrBase64 = await QRCode.toDataURL(qr, { width: 256, margin: 2 })
   } catch (e) {
-    console.error('Error generando QR imagen:', e.message)
+    console.error('Error QR imagen:', e.message)
   }
 })
 
@@ -132,7 +147,7 @@ client.on('ready', async () => {
     app.locals.nombreCuenta = info.pushname || 'Sin nombre'
     console.log('📞 Conectado como:', app.locals.nombreCuenta, '+' + app.locals.telefono)
   } catch (e) {
-    console.error('Error obteniendo info:', e.message)
+    console.error('Error info:', e.message)
   }
 })
 
@@ -142,11 +157,10 @@ client.on('disconnected', (reason) => {
   app.locals.whatsappClient = null
   app.locals.telefono = null
   app.locals.nombreCuenta = null
-  // Reintentar conexión
   setTimeout(() => {
-    console.log('🔄 Reintentando conexión...')
+    console.log('🔄 Reconectando...')
     client.initialize()
-  }, 5000)
+  }, 8000)
 })
 
 client.on('message', async (msg) => {
@@ -179,18 +193,12 @@ client.on('message', async (msg) => {
       await guardarLog(numero, nombre, msg.body, respuesta)
     }
   } catch (error) {
-    console.error('Error:', error.message)
+    console.error('Error mensaje:', error.message)
   }
 })
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => console.log(`🚀 API en puerto ${PORT}`))
-if (process.env.ENABLE_WHATSAPP === 'true') {
-  console.log('🔄 Iniciando WhatsApp...')
-  client.initialize().catch((error) => {
-    console.error('❌ Error iniciando WhatsApp:', error.message)
-    console.error('⚠️ La API seguirá activa.')
-  })
-} else {
-  console.log('⚠️ WhatsApp desactivado. Solo API activa.')
-}
+
+console.log('🔄 Iniciando WhatsApp...')
+client.initialize()
