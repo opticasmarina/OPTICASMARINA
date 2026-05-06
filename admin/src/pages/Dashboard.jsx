@@ -16,8 +16,7 @@ export default function Dashboard() {
   useEffect(() => {
     cargar()
     checkBot()
-    // Polling cada 4 segundos para detectar QR y conexión
-    pollRef.current = setInterval(checkBot, 4000)
+    pollRef.current = setInterval(checkBot, 2000)
     return () => clearInterval(pollRef.current)
   }, [])
 
@@ -40,9 +39,7 @@ export default function Dashboard() {
       const r = await fetch(`${BOT_URL}/api/estado`)
       const data = await r.json()
       setBotStatus(data)
-
       if (!data.listo && data.tieneQR) {
-        // Obtener imagen del QR
         const qr = await fetch(`${BOT_URL}/api/qr`)
         const qrData = await qr.json()
         if (qrData.qr) setQrImg(qrData.qr)
@@ -57,7 +54,6 @@ export default function Dashboard() {
   async function solicitarQR() {
     setQrLoading(true)
     setQrImg(null)
-    // El QR llega solo en el siguiente poll, esperar 2 segundos
     await new Promise(r => setTimeout(r, 2000))
     await checkBot()
     setQrLoading(false)
@@ -88,7 +84,6 @@ export default function Dashboard() {
         </span>
       </div>
 
-      {/* ── Conexión WhatsApp ───────────────────────────────────────── */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -104,91 +99,51 @@ export default function Dashboard() {
 
         <div className="card-body">
           {botStatus.listo ? (
-            // ── Conectado ──────────────────────────────────────────────
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-              <div style={{
-                width: 56, height: 56,
-                background: '#d1fae5',
-                borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
+              <div style={{ width: 56, height: 56, background: '#d1fae5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Wifi size={24} color="#10b981" />
               </div>
               <div>
-                <div style={{ fontWeight: 600, fontSize: 15, color: '#065f46', marginBottom: 4 }}>
-                  Bot conectado correctamente
-                </div>
-                {botStatus.nombre && (
-                  <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 2 }}>
-                    <strong>Cuenta:</strong> {botStatus.nombre}
-                  </div>
-                )}
-                {botStatus.telefono && (
-                  <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                    <strong>Número:</strong> +{botStatus.telefono}
-                  </div>
-                )}
+                <div style={{ fontWeight: 600, fontSize: 15, color: '#065f46', marginBottom: 4 }}>Bot conectado correctamente</div>
+                {botStatus.nombre && <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 2 }}><strong>Cuenta:</strong> {botStatus.nombre}</div>}
+                {botStatus.telefono && <div style={{ fontSize: 13, color: 'var(--text-2)' }}><strong>Número:</strong> +{botStatus.telefono}</div>}
               </div>
             </div>
           ) : qrImg ? (
-            // ── QR disponible ──────────────────────────────────────────
             <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
               <div style={{ flexShrink: 0 }}>
-                <img
-                  src={qrImg}
-                  alt="QR WhatsApp"
-                  style={{ width: 200, height: 200, border: '4px solid var(--border)', borderRadius: 12 }}
-                />
+                <img src={qrImg} alt="QR WhatsApp" style={{ width: 200, height: 200, border: '4px solid var(--border)', borderRadius: 12 }} />
               </div>
               <div style={{ paddingTop: 8 }}>
-                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
-                  Escanea para conectar el bot
-                </div>
+                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>Escanea para conectar el bot</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, color: 'var(--text-2)' }}>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <span style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>1</span>
-                    Abre WhatsApp en tu teléfono
-                  </div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <span style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>2</span>
-                    Toca ⋮ → <strong>Dispositivos vinculados</strong>
-                  </div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <span style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>3</span>
-                    Toca <strong>Vincular un dispositivo</strong>
-                  </div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <span style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>4</span>
-                    Apunta la cámara al QR
-                  </div>
+                  {[
+                    'Abre WhatsApp en tu teléfono',
+                    'Toca ⋮ → Dispositivos vinculados',
+                    'Toca Vincular un dispositivo',
+                    'Apunta la cámara al QR'
+                  ].map((t, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <span style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{i+1}</span>
+                      {t}
+                    </div>
+                  ))}
                 </div>
                 <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <RefreshCw size={11} />
-                  El QR se actualiza automáticamente cada 4 segundos
+                  <RefreshCw size={11} /> El panel se actualiza automáticamente cada 2 segundos
                 </div>
               </div>
             </div>
           ) : (
-            // ── Sin QR todavía ─────────────────────────────────────────
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0' }}>
-              <div style={{
-                width: 56, height: 56,
-                background: '#fef2f2',
-                borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
+              <div style={{ width: 56, height: 56, background: '#fef2f2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <WifiOff size={24} color="#ef4444" />
               </div>
               <div>
-                <div style={{ fontWeight: 600, fontSize: 14, color: '#991b1b', marginBottom: 4 }}>
-                  Bot desconectado
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>
-                  El servidor del bot no está corriendo o está iniciando.
-                </div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: '#991b1b', marginBottom: 4 }}>Bot desconectado</div>
+                <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 8 }}>El servidor no está corriendo o está iniciando. Espera unos segundos.</div>
                 <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                  Si estás en local: corre <code>node index.js</code> en la carpeta <code>bot/</code><br />
-                  Si está en Render: revisa los Logs del servicio.
+                  Local: corre <code>node index.js</code> en la carpeta <code>bot/</code>
                 </div>
               </div>
             </div>
@@ -196,22 +151,15 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Stats ───────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: '1.5rem' }}>
         {cards.map(c => (
           <div className="stat-card" key={c.label}>
-            <div className="stat-icon" style={{ background: c.color + '18' }}>
-              <c.icon size={16} color={c.color} />
-            </div>
-            <div>
-              <div className="stat-value">{loading ? '—' : c.value}</div>
-              <div className="stat-label">{c.label}</div>
-            </div>
+            <div className="stat-icon" style={{ background: c.color + '18' }}><c.icon size={16} color={c.color} /></div>
+            <div><div className="stat-value">{loading ? '—' : c.value}</div><div className="stat-label">{c.label}</div></div>
           </div>
         ))}
       </div>
 
-      {/* ── Últimas conversaciones ───────────────────────────────────── */}
       <div className="card">
         <div className="card-header">
           <span className="card-title">Últimas conversaciones</span>
@@ -225,9 +173,7 @@ export default function Dashboard() {
           </div>
         ) : (
           <table className="table">
-            <thead>
-              <tr><th>Contacto</th><th>Mensaje</th><th>Respuesta</th><th>Fecha</th></tr>
-            </thead>
+            <thead><tr><th>Contacto</th><th>Mensaje</th><th>Respuesta</th><th>Fecha</th></tr></thead>
             <tbody>
               {logs.map(l => (
                 <tr key={l.id}>

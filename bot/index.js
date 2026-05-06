@@ -1,5 +1,5 @@
 require('dotenv').config()
-const { Client, LocalAuth } = require('whatsapp-web.js')
+const { Client, RemoteAuth } = require('whatsapp-web.js')
 const qrcode = require('qrcode-terminal')
 const QRCode = require('qrcode')
 const express = require('express')
@@ -7,22 +7,17 @@ const cors = require('cors')
 const fs = require('fs')
 const path = require('path')
 const routes = require('./src/routes')
+const SupabaseStore = require('./src/session-store')
 const { menuPrincipal, getCatalogo, getFaqs, getCupones, guardarLog } = require('./src/menu')
 
 const app = express()
 
 app.use(cors({
-  origin: [
-    'https://opticasmarina-admin.onrender.com',
-    'http://localhost:5173',
-    'http://localhost:3000'
-  ],
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }))
-
 app.options('*', cors())
-
 app.use(express.json())
 app.use('/api', routes)
 
@@ -74,7 +69,6 @@ function findChrome() {
 const chromePath = findChrome()
 console.log('Chrome path:', chromePath || 'no encontrado')
 
-// Máximo ahorro de memoria para Render Free (512MB)
 const CHROME_ARGS = [
   '--no-sandbox',
   '--disable-setuid-sandbox',
@@ -111,15 +105,19 @@ const CHROME_ARGS = [
   '--js-flags=--max-old-space-size=128',
 ]
 
-const puppeteerConfig = {
-  headless: true,
-  args: CHROME_ARGS,
-}
-
+const puppeteerConfig = { headless: true, args: CHROME_ARGS }
 if (chromePath) puppeteerConfig.executablePath = chromePath
 
+// RemoteAuth guarda la sesión en Supabase Storage automáticamente
+const store = new SupabaseStore()
+
 const client = new Client({
-  authStrategy: new LocalAuth({ clientId: 'whatsapp-bot' }),
+  authStrategy: new RemoteAuth({
+    store,
+    clientId: 'opticasmarina',
+    backupSyncIntervalMs: 60000, // guarda cada 60 seg
+    dataPath: './.wwebjs_auth'
+  }),
   puppeteer: puppeteerConfig,
 })
 
@@ -129,14 +127,13 @@ app.locals.qrBase64 = null
 app.locals.qrString = null
 app.locals.telefono = null
 app.locals.nombreCuenta = null
-app.locals.inicializandoWhatsApp = false
 
 client.on('qr', async (qr) => {
   console.log('\n📱 Escanea este QR:\n')
   qrcode.generate(qr, { small: true })
   app.locals.qrString = qr
   try {
-    app.locals.qrBase64 = await QRCode.toDataURL(qr, { width: 256, margin: 2 })
+    app.locals.qrBase64 = await QRCode.toDataURL(qr, { width: 300, margin: 2 })
   } catch (e) {
     console.error('Error QR imagen:', e.message)
   }
@@ -148,28 +145,22 @@ client.on('authenticated', () => {
   app.locals.qrString = null
 })
 
+client.on('remote_session_saved', () => {
+  console.log('💾 Sesión guardada en Supabase Storage')
+})
+
 client.on('ready', async () => {
   if (app.locals.botListo) return
-
   console.log('🤖 Bot listo!')
-
   app.locals.whatsappClient = client
   app.locals.botListo = true
-  app.locals.inicializandoWhatsApp = false
   app.locals.qrBase64 = null
   app.locals.qrString = null
-
   try {
     const info = client.info
-
     app.locals.telefono = info?.wid?.user || null
     app.locals.nombreCuenta = info?.pushname || 'WhatsApp conectado'
-
-    console.log(
-      '📞 Conectado como:',
-      app.locals.nombreCuenta,
-      app.locals.telefono ? '+' + app.locals.telefono : ''
-    )
+    console.log('📞 Conectado como:', app.locals.nombreCuenta, app.locals.telefono ? '+' + app.locals.telefono : '')
   } catch (e) {
     console.error('Error info:', e.message)
   }
@@ -177,14 +168,10 @@ client.on('ready', async () => {
 
 client.on('disconnected', (reason) => {
   console.log('❌ Desconectado:', reason)
-
   app.locals.botListo = false
   app.locals.whatsappClient = null
   app.locals.telefono = null
   app.locals.nombreCuenta = null
-  app.locals.inicializandoWhatsApp = false
-
-  console.log('⚠️ WhatsApp se desconectó. Reinicia manualmente el servicio para evitar bucles de memoria.')
 })
 
 client.on('message', async (msg) => {
@@ -222,31 +209,21 @@ client.on('message', async (msg) => {
 })
 
 const PORT = process.env.PORT || 3001
-
 app.listen(PORT, () => console.log(`🚀 API en puerto ${PORT}`))
 
 async function iniciarWhatsApp() {
-  if (app.locals.inicializandoWhatsApp || app.locals.botListo) {
-    console.log('⚠️ WhatsApp ya está iniciando o conectado.')
-    return
-  }
-
-  app.locals.inicializandoWhatsApp = true
-  console.log('🔄 Iniciando WhatsApp...')
-
+  console.log('🔄 Iniciando WhatsApp con sesión persistente...')
   try {
     await client.initialize()
   } catch (error) {
-    app.locals.inicializandoWhatsApp = false
     console.error('❌ Error iniciando WhatsApp:', error.message)
-    console.error('⚠️ La API seguirá activa.')
   }
 }
 
-if (process.env.ENABLE_WHATSAPP === 'true') {
+if (process.env.ENABLE_WHATSAPP !== 'false') {
   iniciarWhatsApp()
 } else {
-  console.log('⚠️ WhatsApp desactivado. Solo API activa.')
+  console.log('⚠️ WhatsApp desactivado (ENABLE_WHATSAPP=false)')
 }
 
 process.on('unhandledRejection', (error) => {
